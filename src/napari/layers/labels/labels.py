@@ -421,8 +421,7 @@ class Labels(ScalarFieldBase):
         self._iso_gradient_mode = IsoCategoricalGradientMode(iso_gradient_mode)
 
         self._selected_data: Selection[int] = Selection([1])
-        self.colormap.selection = self.selected_label
-        self.colormap.use_selection = self._show_selected_label
+        self._sync_selection_filter_with_colormap()
         self._prev_selected_label: int | None = None
         self._selected_color = self.get_color(self.selected_label)
         self._updated_slice = None
@@ -565,6 +564,18 @@ class Labels(ScalarFieldBase):
     def colormap(self, colormap: LabelColormapBase):
         self._set_colormap(colormap)
 
+    def _sync_selection_filter_with_colormap(
+        self, selected_data: Sequence[int] | None = None
+    ) -> None:
+        if selected_data is None:
+            selected_data = tuple(self.selected_data)
+        self.colormap.selection = next(reversed(selected_data))
+        self.colormap.use_selection = self._show_selected_label
+        if self._show_selected_label:
+            self.colormap.update_selected_labels_colormap(selected_data)
+        else:
+            self.colormap.clear_selected_labels_colormap()
+
     def _set_colormap(self, colormap):
         colormap = _normalize_label_colormap(colormap)
         if isinstance(colormap, CyclicLabelColormap):
@@ -588,9 +599,10 @@ class Labels(ScalarFieldBase):
             else:
                 color_mode = LabelColorMode.DIRECT
                 self._colormap = self._direct_colormap
+        self._color_mode = color_mode
+        self._sync_selection_filter_with_colormap()
         self._cached_labels = None  # invalidate the cached color mapping
         self._selected_color = self.get_color(self.selected_label)
-        self._color_mode = color_mode
         self.events.colormap()  # Will update the LabelVispyColormap shader
         self.refresh(extent=False)
 
@@ -777,11 +789,13 @@ class Labels(ScalarFieldBase):
                 upper_bound=dtype_lims[1],
             )
         next_selected_label = next(reversed(selected_data))
-        self.colormap.selection = next_selected_label
+        self._sync_selection_filter_with_colormap(selected_data)
         if next_selected_label == self.colormap.background_value:
             self._selected_color = None
         else:
-            self._selected_color = self.colormap.map(next_selected_label)
+            self._selected_color = self.colormap._cmap_without_selection().map(
+                next_selected_label
+            )
         self._selected_data.replace_selection(selected_data)
         if self.show_selected_label:
             self.refresh(extent=False)
@@ -802,8 +816,7 @@ class Labels(ScalarFieldBase):
     @show_selected_label.setter
     def show_selected_label(self, show_selected):
         self._show_selected_label = show_selected
-        self.colormap.use_selection = show_selected
-        self.colormap.selection = self.selected_label
+        self._sync_selection_filter_with_colormap()
         self.events.show_selected_label(show_selected_label=show_selected)
         self.refresh(extent=False)
 
@@ -1038,7 +1051,7 @@ class Labels(ScalarFieldBase):
         if label == self.colormap.background_value:
             col = None
         elif label is None or (
-            self.show_selected_label and label != self.selected_label
+            self.show_selected_label and label not in self.selected_data
         ):
             col = self.colormap.map(self.colormap.background_value)
         else:

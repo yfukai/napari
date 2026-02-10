@@ -807,6 +807,58 @@ def test_selected_data_refresh_when_filtering():
     refresh_mock.assert_called_once_with(extent=False)
 
 
+@pytest.mark.parametrize(
+    'colormap',
+    [
+        None,
+        DirectLabelColormap(
+            color_dict={
+                0: [0, 0, 0, 0],
+                1: [1, 0, 0, 1],
+                2: [0, 1, 0, 1],
+                3: [0, 0, 1, 1],
+                4: [1, 1, 0, 1],
+                None: [1, 1, 1, 1],
+            }
+        ),
+    ],
+    ids=['cyclic', 'direct'],
+)
+def test_show_selected_label_with_multiple_selected_data(colormap):
+    data = np.arange(5, dtype=np.int32)[None, :]
+    layer = (
+        Labels(data) if colormap is None else Labels(data, colormap=colormap)
+    )
+    mapped_colors_all = layer.colormap.map(data)
+    original_colormap = layer.colormap
+
+    layer.show_selected_label = True
+    layer.selected_data = [1, 3]
+
+    assert layer.colormap is original_colormap
+    assert layer.colormap.selected_labels_colormap is not None
+
+    mapped_colors_selected = layer.colormap.map(data)
+    for label in (1, 3):
+        npt.assert_allclose(
+            mapped_colors_selected[data == label],
+            mapped_colors_all[data == label],
+        )
+
+    non_selected_colors = mapped_colors_selected[np.isin(data, [0, 2, 4])]
+    background_color = mapped_colors_all[
+        data == layer.colormap.background_value
+    ][0]
+    npt.assert_allclose(
+        non_selected_colors,
+        np.broadcast_to(background_color, non_selected_colors.shape),
+    )
+
+    layer.show_selected_label = False
+    assert layer.colormap.selected_labels_colormap is None
+    npt.assert_allclose(layer.colormap.map(data), mapped_colors_all)
+
+
 def test_label_color():
     """Test getting label color."""
     np.random.seed(0)
