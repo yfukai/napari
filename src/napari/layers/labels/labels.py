@@ -394,7 +394,7 @@ class Labels(ScalarFieldBase):
             properties=Event,
             selected_label=WarningEmitter(
                 trans._(
-                    'layer.events.selected_label is deprecated and will be removed in 0.8.0.'
+                    'layer.events.selected_label is deprecated and will be removed in 0.8.0. '
                     'Please use layer.selected_data.events.items_changed instead.',
                     deferred=True,
                 ),
@@ -431,9 +431,13 @@ class Labels(ScalarFieldBase):
         self._status = self.mode
         self._preserve_labels = False
 
-        typing.cast(WarningEmitter, self.events.selected_label).connect_from(
-            self.selected_data.events.items_changed
-        )  # For backwards compatibility
+        # For backwards compatibility
+        self.selected_data.events.items_changed.connect(
+            self._on_selected_data_change
+        )
+
+    def _on_selected_data_change(self, event):
+        self.events.selected_label()
 
     def _slice_dtype(self):
         """Calculate dtype of data view based on data dtype and current colormap"""
