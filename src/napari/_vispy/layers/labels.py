@@ -236,6 +236,9 @@ class VispyLabelsLayer(VispyScalarFieldBaseLayer):
         # from napari.utils.colormaps.Colormap (or similar). If we use it
         # in our constructor, we have access to the texture data we need
         colormap = self.layer.colormap
+        selected_labels_colormap = colormap.selected_labels_colormap
+        if colormap.use_selection and selected_labels_colormap is not None:
+            colormap = selected_labels_colormap
         auto_mode = isinstance(colormap, CyclicLabelColormap)
         view_dtype = self.layer._slice.image.view.dtype
         raw_dtype = self.layer._slice.image.raw.dtype
@@ -272,7 +275,7 @@ class VispyLabelsLayer(VispyScalarFieldBaseLayer):
             val_texture = build_textures_from_dict(color_dict, max_size)
 
             dtype = _texture_dtype(
-                self.layer._direct_colormap._num_unique_colors + 2,
+                colormap._num_unique_colors + 2,
                 raw_dtype,
             )
             if issubclass(dtype.type, np.integer):

@@ -208,6 +208,9 @@ class LabelColormapBase(Colormap):
         default={}
     )
     _cache_other: dict[str, Any] = PrivateAttr(default={})
+    _selected_labels_colormap: 'DirectLabelColormap | None' = PrivateAttr(
+        default=None
+    )
 
     model_config = EventedModel.model_config | ConfigDict(
         # this config is to avoid deepcopy of cached_property
@@ -257,6 +260,39 @@ class LabelColormapBase(Colormap):
         """Mechanism to clean cached properties"""
         self._cache_mapping = {}
         self._cache_other = {}
+
+    @property
+    def selected_labels_colormap(self) -> 'DirectLabelColormap | None':
+        return self._selected_labels_colormap
+
+    def update_selected_labels_colormap(
+        self, selected_labels: Sequence[int]
+    ) -> None:
+        cmap_without_selection = self._cmap_without_selection()
+        background_color = np.asarray(
+            cmap_without_selection.map(
+                cmap_without_selection.background_value
+            ),
+            dtype=np.float32,
+        )
+        color_dict: dict[int | None, np.ndarray] = {
+            None: background_color,
+            cmap_without_selection.background_value: background_color,
+        }
+        for label in selected_labels:
+            color_dict[int(label)] = np.asarray(
+                cmap_without_selection.map(int(label)), dtype=np.float32
+            )
+
+        self._selected_labels_colormap = DirectLabelColormap(
+            color_dict=color_dict,
+            background_value=cmap_without_selection.background_value,
+            selection=self.selection,
+            use_selection=False,
+        )
+
+    def clear_selected_labels_colormap(self) -> None:
+        self._selected_labels_colormap = None
 
     @property
     def _num_unique_colors(self) -> int:
@@ -343,6 +379,9 @@ class CyclicLabelColormap(LabelColormapBase):
         self, values: np.ndarray | np.integer
     ) -> np.ndarray | np.integer:
         """Map input values to values for send to GPU."""
+        selected_labels_colormap = self.selected_labels_colormap
+        if self.use_selection and selected_labels_colormap is not None:
+            return selected_labels_colormap._data_to_texture(values)
         return _cast_labels_data_to_texture_dtype_auto(values, self)
 
     def _map_without_cache(self, values) -> np.ndarray:
@@ -370,6 +409,10 @@ class CyclicLabelColormap(LabelColormapBase):
             but with the last dimension of size 4
             Mapped colors.
         """
+        selected_labels_colormap = self.selected_labels_colormap
+        if self.use_selection and selected_labels_colormap is not None:
+            return selected_labels_colormap.map(values)
+
         original_shape = np.shape(values)
         values = np.atleast_1d(values)
 
@@ -502,6 +545,9 @@ class DirectLabelColormap(LabelColormapBase):
         self, values: np.ndarray | np.integer
     ) -> np.ndarray | np.integer:
         """Map input values to values for send to GPU."""
+        selected_labels_colormap = self.selected_labels_colormap
+        if self.use_selection and selected_labels_colormap is not None:
+            return selected_labels_colormap._data_to_texture(values)
         return _cast_labels_data_to_texture_dtype_direct(values, self)
 
     def map(self, values: np.ndarray | np.integer | int) -> np.ndarray:
@@ -517,6 +563,10 @@ class DirectLabelColormap(LabelColormapBase):
         np.ndarray of same shape as values, but with last dimension of size 4
             Mapped colors.
         """
+        selected_labels_colormap = self.selected_labels_colormap
+        if self.use_selection and selected_labels_colormap is not None:
+            return selected_labels_colormap.map(values)
+
         if isinstance(values, np.integer):
             values = int(values)
         if isinstance(values, int):
