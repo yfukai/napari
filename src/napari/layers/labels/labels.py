@@ -751,6 +751,8 @@ class Labels(ScalarFieldBase):
     @property
     def selected_label(self):
         """int: Index of selected label."""
+        if len(self._selected_data) == 0:
+            return self.colormap.background_value
         return next(reversed(self._selected_data))
 
     @selected_label.setter
@@ -1734,7 +1736,7 @@ def _coerce_indices_for_vectorization(array, indices: list) -> tuple:
 
 
 class WrongSelectedLabelError(ValueError):
-    """Raised when the selected label is not in the data array."""
+    """Raised when the selected label is not in the range of data array dtype."""
 
     _MAX_DISPLAYED_INVALID_VALUES = 6
 
